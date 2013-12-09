@@ -1,11 +1,12 @@
-from distutils.core import setup
-from crimpycache import __version__, __author__
+from setuptools import setup
+from crimpycache import __version__
 
 setup(
     name='crimpycache',
     version=__version__,
-    author=__author__,
-    packages=['crimpycache',],
+    author='John Martin',
+    author_email='john@lonepixel.com',
+    packages=['crimpycache'],
     url='https://github.com/johnmartin78/crimpycache',
     license='MIT',
     install_requires=['Django>=1.6'],
