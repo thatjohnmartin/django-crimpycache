@@ -58,7 +58,7 @@ def _safe_cache_key(key, no_limit=False):
             cache_key = hashlib.md5(cache_key).hexdigest()
 
     # remove any characters not between ascii 33 and 127 for memcached
-    cache_key = re.sub(ur'[^\u0021-\u007F]', '-', cache_key, re.UNICODE)
+    cache_key = re.sub(r'[^\u0021-\u007F]', '-', cache_key, re.UNICODE)
     return cache_key
 
 def _version_number_key(key):
