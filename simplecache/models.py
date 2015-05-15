@@ -1,5 +1,11 @@
+__author__ = 'john'
+
+import logging
 from django.db import models
-from crimpycache import cache
+from simplecache import cache
+
+log = logging.getLogger(__name__)
+
 
 class CacheMixin(models.Model):
     """A mixin to make it easy to cache ORM objects."""
@@ -55,6 +61,7 @@ class CacheMixin(models.Model):
             cache.version(cls.generate_cache_key_from_label(cls.cache_key_all)),
             lambda: cls.objects.all())
 
+
 def invalidate_cache(sender, instance, **kwargs):
     """Invalidate all of the known cache keys."""
 
@@ -63,13 +70,16 @@ def invalidate_cache(sender, instance, **kwargs):
         for key in sender.cache_key_fields:
             if type(key) == str:
                 key = (key,)
+            log.debug('CACHE: Invalidating %s for %s' % (key, instance))
             cache.incr(sender.generate_cache_key_from_fields(key, instance))
 
         # invalidate "all" list
+        log.debug('CACHE: Invalidating %s for %s' % (sender.cache_key_all, instance))
         cache.incr(sender.generate_cache_key_from_label(sender.cache_key_all))
 
 models.signals.post_save.connect(invalidate_cache)
 models.signals.post_delete.connect(invalidate_cache)
+
 
 def prepare_cache_keys_lookup(sender, **kwargs):
     """Creates a lookup for cache keys."""
