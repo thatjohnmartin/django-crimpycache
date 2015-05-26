@@ -9,6 +9,6 @@ setup(
     packages=find_packages(),
     url='https://github.com/thatjohnmartin/simplecache',
     license='MIT',
-    install_requires=['Django>=1.7'],
+    install_requires=['Django>=1.8'],
     long_description=open('README.md').read(),
 )

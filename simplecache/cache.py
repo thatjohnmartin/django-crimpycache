@@ -8,7 +8,6 @@ from django.utils.encoding import smart_str
 
 log = logging.getLogger(__name__)
 
-
 # The new API is simply:
 #
 #   - version()
@@ -41,21 +40,23 @@ log = logging.getLogger(__name__)
 #            incr('segments', self.account)
 #            incr('segment-' + self.id, self.account)
 
-def _safe_cache_key(key, no_limit=False):
+VERSION_SUFFIX = '.version'
+
+def safe_cache_key(key, no_limit=False):
     """ Returns a safe cache key
     (esp. for memcache which has restrictions on what keys are valid).
 
     Replaces invalid memcache control characters with an underscore.
     If len is > 240 will return part of the value plus an md5 hexdigest of value.
 
-    (set to 240 and not 250 because Django can prepend prefix and version numbers)
+    (set to 230 and not 250 to make room for prefix and suffix)
     """
     # force to bytestring to make any unicode safe for memcached
     cache_key = smart_str(key, encoding='ascii', errors='ignore')
-    if len(cache_key) > 240:
+    if len(cache_key) > 230:
         if not no_limit:
             # use a subset of data to form the cache key
-            cache_key = cache_key[:200] + '-' + hashlib.md5(cache_key[:500]).hexdigest()
+            cache_key = cache_key[:197] + '-' + hashlib.md5(cache_key[:500]).hexdigest()  # adds up to len 230
         else:
             cache_key = hashlib.md5(cache_key).hexdigest()
 
@@ -64,22 +65,9 @@ def _safe_cache_key(key, no_limit=False):
     return cache_key
 
 
-def _version_number_key(key):
-    return key + '.version'
-
-
-def _gen_key_with_prefix(name, prefix=None):
-    prefix_string = ''
-    if prefix:
-        # cheat and avoid circular (and unnecessary) imports by grabbing a str version of the class name
-        cls = prefix.__class__.__name__
-        prefix_string = str(prefix) + '-'
-    return prefix_string + name
-
-
-def _get_version(key):
+def get_version(key):
     """Get a version number from the cache, or create one if it doesn't exist."""
-    version_key = _version_number_key(key)
+    version_key = safe_cache_key(key) + VERSION_SUFFIX
     version = cache.get(version_key)
     if not version:
         log.debug('CACHE: Creating new version key %s' % version_key)
@@ -88,30 +76,30 @@ def _get_version(key):
     return version
 
 
-def version(name, prefix=None):
-    """Generate a key with the latest version number from the cache, use an Account or User or string as a prefix."""
-    key = _gen_key_with_prefix(name, prefix)
-    return '%s:%s' % (key, _get_version(key))
+def version(key):
+    """Generate a key with the latest version number from the cache."""
+    return '%s:%s' % (safe_cache_key(key), get_version(key))
 
 
 def get(key, f, ttl=60*60*23):
     """Get an item from the cache, or update it if it's not there, default to 48 hour TTL."""
-    item = cache.get(key)
-    if item is None: # specifically checking against None, so 0, [], etc get through
+    safe_key = safe_cache_key(key)
+    item = cache.get(safe_key)
+    if item is None:  # specifically checking against None, so 0, [], etc get through
         item = f()
-        cache.set(key, item, ttl)
-        log.debug('CACHE: Adding item to cache at %s' % (key, ))
+        cache.set(safe_key, item, ttl)
+        log.debug('CACHE: Adding item to cache at %s' % (safe_key, ))
     else:
-        log.debug('CACHE: Found cached item at %s' % key)
+        log.debug('CACHE: Found cached item at %s' % safe_key)
     return item
 
 
-def incr(name, prefix=None):
+def incr(key):
     """Increment the version of an item, or create one if it doesn't exist."""
-    key = _gen_key_with_prefix(name, prefix) + '.version'
+    version_key = safe_cache_key(key) + VERSION_SUFFIX
     try:
-        cache.incr(key)
-        log.debug('CACHE: Increment version key %s' % key)
+        cache.incr(version_key)
+        log.debug('CACHE: Increment version key %s' % version_key)
     except ValueError:
-        cache.add(key, 1)
-        log.debug('CACHE: Create version key %s' % key)
+        cache.add(version_key, 1)
+        log.debug('CACHE: Create version key %s' % version_key)

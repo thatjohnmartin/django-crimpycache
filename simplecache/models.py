@@ -2,7 +2,7 @@ __author__ = 'john'
 
 import logging
 from django.db import models
-from simplecache import cache
+from . import cache
 
 log = logging.getLogger(__name__)
 
