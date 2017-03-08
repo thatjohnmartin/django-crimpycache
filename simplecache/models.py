@@ -1,5 +1,3 @@
-__author__ = 'john'
-
 import logging
 from django.db import models
 from . import cache

@@ -1,5 +1,3 @@
-__author__ = 'john'
-
 import logging
 import re
 import hashlib
@@ -43,11 +41,10 @@ log = logging.getLogger(__name__)
 VERSION_SUFFIX = '.version'
 
 def safe_cache_key(key, no_limit=False):
-    """ Returns a safe cache key
-    (esp. for memcache which has restrictions on what keys are valid).
+    """Returns a safe cache key (esp. for memcache which has restrictions on what keys are valid).
 
-    Replaces invalid memcache control characters with an underscore.
-    If len is > 240 will return part of the value plus an md5 hexdigest of value.
+    Replaces invalid memcache control characters with an underscore. If len is > 240 will return part
+    of the value plus an md5 hexdigest of value.
 
     (set to 230 and not 250 to make room for prefix and suffix)
     """
@@ -81,18 +78,27 @@ def version(key):
     return '%s:%s' % (safe_cache_key(key), get_version(key))
 
 
-def get(key, f, ttl=60*60*23):
-    """Get an item from the cache, or update it if it's not there, default to 48 hour TTL."""
+def getf(key, f, ttl=60*60*23):
+    """Get an item from the cache, or update it if it's not there, default to 48 hour TTL. Return the item
+    and a refreshed flag.
+    """
     safe_key = safe_cache_key(key)
     item = cache.get(safe_key)
     if item is None:  # specifically checking against None, so 0, [], etc get through
         item = f()
         cache.set(safe_key, item, ttl)
+        refreshed = True
         log.debug('CACHE: Adding item to cache at %s' % (safe_key, ))
     else:
+        refreshed = False
         log.debug('CACHE: Found cached item at %s' % safe_key)
-    return item
+    return item, refreshed
 
+
+def get(key, f, ttl=60 * 60 * 23):
+    """Get an item from the cache, or update it if it's not there, default to 48 hour TTL. Return the item."""
+    item, refreshed = getf(key, f, ttl=ttl)
+    return item
 
 def incr(key):
     """Increment the version of an item, or create one if it doesn't exist."""
