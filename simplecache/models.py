@@ -11,8 +11,6 @@ class CacheManager(object):
     def __init__(self, model_class):
         self.model_class = model_class
 
-        print('model class: %s' % model_class)
-
         # create a dictionary of cache keys keyed by set
         for key in self.model_class.cache_key_fields:
             if type(key) == str:
