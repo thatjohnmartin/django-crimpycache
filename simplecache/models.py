@@ -33,9 +33,22 @@ class CacheManager(object):
             cache_key += '-%s-%s' % (field, str(values[field] if is_dict else getattr(values, field)))
         return self.model_class._meta.db_table + cache_key
 
+    def _generate_cache_key_from_partition(self, partition, value):
+        """Generate a cache key from a partition name and value, useful for caching groups of things."""
+        return '%s-%s-%s' % (self.model_class._meta.db_table, partition, value)
+
     def _generate_cache_key_from_label(self, label):
         """Generate a cache key from a label, useful for arbitrary lists."""
         return self.model_class._meta.db_table + '-' + label
+
+    def get_version_for_fields(self, key, **kwargs):
+        return cache.version(self._generate_cache_key_from_fields(self._cache_key_fields_lookup[key], kwargs)),
+
+    def get_version_for_partition(self, partition, value):
+        return cache.version(self._generate_cache_key_from_partition(partition, value))
+
+    def get_version_for_all(self):
+        return cache.version(self._generate_cache_key_from_label(self.model_class.cache_key_all))
 
     def get(self, **kwargs):
         """Get a single item from the cache, or populate the cache if it doesn't exist. Return just the item."""
@@ -50,7 +63,7 @@ class CacheManager(object):
         # TODO: we could cache by each key, not just the given one, cache.get take another param
         # TODO: notice foreign key fields and resolve to <name>_id, maybe accept both forms for single cache
         return cache.getf(
-            cache.version(self._generate_cache_key_from_fields(self._cache_key_fields_lookup[key], kwargs)),
+            self.get_version_for_fields(self._cache_key_fields_lookup[key], **kwargs),
             lambda: self.model_class.objects.get(**kwargs))
 
     def all(self):
@@ -64,7 +77,7 @@ class CacheManager(object):
         """
         # TODO: we could cache each individual object here
         return cache.get(
-            cache.version(self._generate_cache_key_from_label(self.model_class.cache_key_all)),
+            self.get_version_for_all(),
             lambda: self.model_class.objects.all())
 
 
@@ -75,6 +88,7 @@ class CacheMixin(models.Model):
         abstract = True
 
     cache_key_fields = ('id',)
+    cache_key_partitions = ()
     cache_key_all = 'all'
 
     _cache_managers_by_type = {}
@@ -88,8 +102,13 @@ def invalidate_cache(sender, instance, **kwargs):
         for key in sender.cache_key_fields:
             if type(key) == str:
                 key = (key,)
-            log.debug('CACHE: Invalidating %s for %s' % (key, instance))
+            log.debug('CACHE: Invalidating field %s for %s' % (key, instance))
             cache.incr(sender.cache._generate_cache_key_from_fields(key, instance))
+
+        # invalidate all partition fields
+        for partition in sender.cache_key_partitions:
+            log.debug('CACHE: Invalidating partition %s for %s' % (partition, instance))
+            cache.incr(sender.cache._generate_cache_key_from_partition(partition, instance))
 
         # invalidate "all" list
         log.debug('CACHE: Invalidating %s for %s' % (sender.cache_key_all, instance))
