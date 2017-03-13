@@ -41,8 +41,8 @@ class CacheManager(object):
         """Generate a cache key from a label, useful for arbitrary lists."""
         return self.model_class._meta.db_table + '-' + label
 
-    def get_version_for_fields(self, key, **kwargs):
-        return cache.version(self._generate_cache_key_from_fields(self._cache_key_fields_lookup[key], kwargs)),
+    def get_version_for_fields(self, key, values):
+        return cache.version(self._generate_cache_key_from_fields(self._cache_key_fields_lookup[self._generate_cache_key_dict_key(key)], values))
 
     def get_version_for_partition(self, partition, value):
         return cache.version(self._generate_cache_key_from_partition(partition, value))
@@ -63,8 +63,18 @@ class CacheManager(object):
         # TODO: we could cache by each key, not just the given one, cache.get take another param
         # TODO: notice foreign key fields and resolve to <name>_id, maybe accept both forms for single cache
         return cache.getf(
-            self.get_version_for_fields(self._cache_key_fields_lookup[key], **kwargs),
+            self.get_version_for_fields(self._cache_key_fields_lookup[key], kwargs),
             lambda: self.model_class.objects.get(**kwargs))
+
+    def partition(self, partition, value):
+        items, refreshed = self.partitionf(partition, value)
+        return items
+
+    def partitionf(self, partition, value):
+        assert partition in self.model_class.cache_key_partitions, 'The partition %s was not declared' % partition
+        return cache.getf(
+            self.get_version_for_partition(partition, value),
+            lambda: self.model_class.objects.filter(**{partition: value}))
 
     def all(self):
         """Get a list of all objects from the cache, or populate the cache if that list doesn't exist."""
@@ -76,7 +86,7 @@ class CacheManager(object):
         list of items and a refreshed flag.
         """
         # TODO: we could cache each individual object here
-        return cache.get(
+        return cache.getf(
             self.get_version_for_all(),
             lambda: self.model_class.objects.all())
 
@@ -108,7 +118,7 @@ def invalidate_cache(sender, instance, **kwargs):
         # invalidate all partition fields
         for partition in sender.cache_key_partitions:
             log.debug('CACHE: Invalidating partition %s for %s' % (partition, instance))
-            cache.incr(sender.cache._generate_cache_key_from_partition(partition, instance))
+            cache.incr(sender.cache._generate_cache_key_from_partition(partition, getattr(instance, partition)))
 
         # invalidate "all" list
         log.debug('CACHE: Invalidating %s for %s' % (sender.cache_key_all, instance))
